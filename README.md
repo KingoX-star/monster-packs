@@ -21,7 +21,10 @@ Ein 3D-Incremental-Spiel aus der Ego-Perspektive: Du reißt Booster-Packs auf, z
 
 ## Was drin ist
 
-- Pack-Berg mit Rutsche, Laden-Tresen, Halle
+- Waldlichtung mit Himmel, Tannen, Laubbäumen, Wiese und Felsen
+- Pack Store als Holzhütte mit Tresen und Regal
+- 100.000 Packs liegen von Anfang an als begehbarer Berg bereit und werden beim Öffnen weniger (es kommen keine neuen dazu)
+- Packs als Folienbeutel mit gewölbter Mitte und gezackten Rändern
 - Monster-Baukasten: 4 Körperformen, 4 Elemente, Augen, Maul, Hörner, Flügel, Schwanz, Stacheln, Namen aus Silben
 - 5 Seltenheiten plus 1 % Glanz-Chance (zehnfacher Wert)
 - Album mit 16 Plätzen: neue Monster kommen automatisch ins Album, jedes gibt +3 % Verkaufswert
@@ -33,5 +36,7 @@ Ein 3D-Incremental-Spiel aus der Ego-Perspektive: Du reißt Booster-Packs auf, z
 
 - `scripts/main.gd`: Welt, HUD, Laden, Album und der Kern-Loop
 - `scripts/player.gd`: Ego-Steuerung
+- `scripts/pack_pile.gd`: der Berg aus 100.000 Packs
+- `scripts/pack_mesh.gd`: die Form eines Packs
 - `scripts/monster_gen.gd`: erzeugt Monster und Seltenheiten
 - `scripts/monster_card.gd`: zeichnet die Monster-Karten

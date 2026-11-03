@@ -7,9 +7,11 @@ const MonsterCard = preload("res://scripts/monster_card.gd")
 const PlayerScript = preload("res://scripts/player.gd")
 
 const SAVE_PATH = "user://save.cfg"
-const PILE_CENTER = Vector3(0, 0, -8)
-const PILE_HALF = Vector2(7, 5)
-const SHOP_POS = Vector3(0, 0, 11)
+const PackPileScript = preload("res://scripts/pack_pile.gd")
+const PackMeshScript = preload("res://scripts/pack_mesh.gd")
+const PILE_CENTER = Vector3(0, 0, -4)
+const STORE_POS = Vector3(14.5, 0, -4)
+const SHOP_POS = Vector3(11.6, 0, -4)
 const REACH = 7.0
 const ALBUM_BONUS_PER_ENTRY = 0.03
 
@@ -21,10 +23,6 @@ const GADGETS = [
 	{"id": "lens", "name": "Glückslupe", "desc": "+20 % Chance auf Selten und besser", "base": 2000, "mult": 2.0, "max": 5},
 ]
 
-const PACK_COLORS = [
-	Color(0.9, 0.25, 0.3), Color(0.25, 0.5, 0.95), Color(0.98, 0.75, 0.2),
-	Color(0.4, 0.8, 0.4), Color(0.7, 0.35, 0.9), Color(0.2, 0.8, 0.85),
-]
 
 # --- Spielstand ---
 var coins := 0
@@ -43,8 +41,9 @@ var flow_idle := 0.0
 var looking_at := ""
 var shop_open := false
 var album_open := false
-var chute_timer := 0.0
-var falling_packs := 0
+var pile  # pack_pile.gd
+var saved_pile := PackedInt32Array()
+var look_point := Vector3.ZERO
 
 # --- HUD ---
 var lbl_coins: Label
@@ -190,14 +189,8 @@ func _process(delta: float) -> void:
 	# Pack in der Hand wackelt mit dem Fortschritt
 	if hand_pack:
 		var k := rip_progress / clicks_needed()
-		hand_pack.rotation = Vector3(sin(Time.get_ticks_msec() * 0.03) * 0.08 * k, 0.35, sin(Time.get_ticks_msec() * 0.05) * 0.1 * k)
+		hand_pack.rotation = Vector3(PI / 2.0 + sin(Time.get_ticks_msec() * 0.03) * 0.08 * k, 0.35, sin(Time.get_ticks_msec() * 0.05) * 0.1 * k)
 		hand_pack.visible = looking_at == "pile"
-
-	# Rutsche lässt Packs auf den Berg fallen
-	chute_timer -= delta
-	if chute_timer <= 0.0 and falling_packs < 30:
-		chute_timer = 0.35
-		_spawn_falling_pack()
 
 	_refresh_hud()
 
@@ -219,9 +212,13 @@ func _update_look() -> void:
 		if kind == "shop" and from.distance_to(hit["position"]) > 3.5:
 			return
 		looking_at = kind
+		look_point = hit["position"]
 
 
 func _add_rip(amount: float) -> void:
+	if pile.remaining <= 0:
+		toast("Alle 100.000 Packs sind geöffnet!")
+		return
 	if bag.size() + MonsterGen.CARDS_PER_PACK > bag_capacity():
 		toast("Rucksack voll! Bring die Monster zum Laden (E).")
 		return
@@ -236,6 +233,10 @@ func _open_packs() -> void:
 	var free := bag_capacity() - bag.size()
 	var count := mini(packs_per_open(), free / MonsterGen.CARDS_PER_PACK)
 	if count <= 0:
+		return
+	count = pile.take(look_point, count)
+	if count <= 0:
+		toast("Hier liegen keine Packs mehr – geh näher an den Berg.")
 		return
 	var cards: Array = []
 	var news := {}
@@ -265,7 +266,7 @@ func _sell_and_open_shop() -> void:
 			total += int(m["value"])
 		total = int(round(total * album_multiplier()))
 		coins += total
-		_floating_text("+" + fmt(total) + " Münzen", SHOP_POS + Vector3(0, 2.0, -0.2))
+		_floating_text("+" + fmt(total) + " Münzen", SHOP_POS + Vector3(-0.6, 2.0, 0))
 		toast("%d Monster abgegeben für %s Münzen" % [bag.size(), fmt(total)])
 		bag.clear()
 		save_game()
@@ -316,217 +317,311 @@ func _invisible_wall(size: Vector3, pos: Vector3) -> void:
 
 
 func _build_world() -> void:
+	# Himmel, Sonne, Nebel
+	var sky_mat := ProceduralSkyMaterial.new()
+	sky_mat.sky_top_color = Color(0.32, 0.55, 0.88)
+	sky_mat.sky_horizon_color = Color(0.72, 0.82, 0.9)
+	sky_mat.ground_horizon_color = Color(0.5, 0.6, 0.5)
+	sky_mat.ground_bottom_color = Color(0.2, 0.28, 0.18)
+	var sky := Sky.new()
+	sky.sky_material = sky_mat
 	var env := Environment.new()
-	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color(0.08, 0.07, 0.07)
-	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color(1.0, 0.9, 0.8)
-	env.ambient_light_energy = 0.55
+	env.background_mode = Environment.BG_SKY
+	env.sky = sky
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+	env.ambient_light_energy = 0.7
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	env.glow_enabled = true
-	env.glow_intensity = 0.6
-	env.glow_bloom = 0.08
+	env.glow_intensity = 0.5
+	env.glow_bloom = 0.05
+	env.fog_enabled = true
+	env.fog_light_color = Color(0.7, 0.8, 0.85)
+	env.fog_density = 0.006
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
 
 	var sun := DirectionalLight3D.new()
-	sun.rotation_degrees = Vector3(-60, 25, 0)
-	sun.light_energy = 0.7
+	sun.rotation_degrees = Vector3(-48, -35, 0)
+	sun.light_energy = 1.25
+	sun.light_color = Color(1.0, 0.95, 0.85)
 	sun.shadow_enabled = true
+	sun.directional_shadow_max_distance = 70.0
 	add_child(sun)
-	for x in [-9.0, 0.0, 9.0]:
-		for z in [-9.0, 0.0, 9.0]:
-			var l := OmniLight3D.new()
-			l.position = Vector3(x, 8.0, z)
-			l.light_color = Color(1.0, 0.85, 0.65)
-			l.light_energy = 1.6
-			l.omni_range = 14.0
-			add_child(l)
 
-	# Halle
-	var concrete := _mat(Color(0.42, 0.41, 0.4))
-	var wall := _mat(Color(0.72, 0.64, 0.54))
-	_box(Vector3(32, 1, 32), Vector3(0, -0.5, 0), concrete)
-	_box(Vector3(32, 10, 1), Vector3(0, 5, -15.5), wall)
-	_box(Vector3(32, 10, 1), Vector3(0, 5, 15.5), wall)
-	_box(Vector3(1, 10, 32), Vector3(-15.5, 5, 0), wall)
-	_box(Vector3(1, 10, 32), Vector3(15.5, 5, 0), wall)
-	_box(Vector3(32, 0.5, 32), Vector3(0, 10, 0), _mat(Color(0.25, 0.24, 0.24)), false)
-	var beam := _mat(Color(0.15, 0.17, 0.2), 0.5, 0.6)
-	for x in [-10.0, 0.0, 10.0]:
-		_box(Vector3(0.4, 0.6, 31), Vector3(x, 9.4, 0), beam, false)
+	_build_ground()
+	_build_forest()
+	_build_store()
 
-	_build_pile()
-	_build_railing()
-	_build_chute()
-	_build_shop()
+	pile = PackPileScript.new()
+	pile.position = PILE_CENTER
+	add_child(pile)
+	pile.setup(saved_pile)
 
 
-func _pile_height(x: float, z: float) -> float:
-	var dx := (x - PILE_CENTER.x) / PILE_HALF.x
-	var dz := (z - PILE_CENTER.z) / PILE_HALF.y
-	return maxf(0.05, 1.8 * (1.0 - (dx * dx + dz * dz)))
+func _build_ground() -> void:
+	var noise := FastNoiseLite.new()
+	noise.frequency = 0.02
+	var grad := Gradient.new()
+	grad.set_color(0, Color(0.16, 0.33, 0.12))
+	grad.set_color(1, Color(0.3, 0.48, 0.18))
+	var tex := NoiseTexture2D.new()
+	tex.noise = noise
+	tex.color_ramp = grad
+	tex.seamless = true
+	tex.width = 512
+	tex.height = 512
+	var grass := StandardMaterial3D.new()
+	grass.albedo_texture = tex
+	grass.uv1_scale = Vector3(30, 30, 30)
+	grass.roughness = 0.95
+	var ground := MeshInstance3D.new()
+	var plane := PlaneMesh.new()
+	plane.size = Vector2(300, 300)
+	ground.mesh = plane
+	ground.material_override = grass
+	add_child(ground)
+	var body := StaticBody3D.new()
+	var col := CollisionShape3D.new()
+	var sh := BoxShape3D.new()
+	sh.size = Vector3(300, 1, 300)
+	col.shape = sh
+	col.position.y = -0.5
+	body.add_child(col)
+	add_child(body)
+
+	# Erdfläche unter dem Berg und Weg zum Store
+	var dirt := _mat(Color(0.42, 0.32, 0.2), 1.0)
+	var disk := MeshInstance3D.new()
+	var cyl := CylinderMesh.new()
+	cyl.top_radius = PackPileScript.RADIUS + 1.5
+	cyl.bottom_radius = PackPileScript.RADIUS + 1.5
+	cyl.height = 0.02
+	disk.mesh = cyl
+	disk.material_override = dirt
+	disk.position = PILE_CENTER + Vector3(0, 0.01, 0)
+	add_child(disk)
+	_box(Vector3(STORE_POS.x - PILE_CENTER.x - PackPileScript.RADIUS, 0.02, 2.2), Vector3((PILE_CENTER.x + PackPileScript.RADIUS + STORE_POS.x) / 2.0, 0.01, STORE_POS.z), dirt, false)
+
+	# Grasbüschel
+	var tuft := CylinderMesh.new()
+	tuft.top_radius = 0.0
+	tuft.bottom_radius = 0.035
+	tuft.height = 0.28
+	tuft.radial_segments = 4
+	var tmat := StandardMaterial3D.new()
+	tmat.vertex_color_use_as_albedo = true
+	tmat.roughness = 1.0
+	tuft.material = tmat
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = true
+	mm.mesh = tuft
+	mm.instance_count = 9000
+	for i in mm.instance_count:
+		var a := rng.randf() * TAU
+		var r := rng.randf_range(PackPileScript.RADIUS + 2.0, 45.0)
+		var p := PILE_CENTER + Vector3(cos(a) * r, 0.12, sin(a) * r)
+		var s := rng.randf_range(0.6, 1.4)
+		mm.set_instance_transform(i, Transform3D(Basis.from_euler(Vector3(rng.randf_range(-0.3, 0.3), 0, rng.randf_range(-0.3, 0.3))).scaled(Vector3(s, s, s)), p))
+		mm.set_instance_color(i, Color(0.18, 0.36, 0.12).lerp(Color(0.36, 0.52, 0.2), rng.randf()))
+	var mmi := MultiMeshInstance3D.new()
+	mmi.multimesh = mm
+	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mmi)
 
 
-func _build_pile() -> void:
-	var mesh := BoxMesh.new()
-	mesh.size = Vector3(0.26, 0.04, 0.36)
+func _tree_multimesh(mesh: Mesh, count: int) -> MultiMesh:
 	var mat := StandardMaterial3D.new()
 	mat.vertex_color_use_as_albedo = true
-	mat.metallic = 0.55
-	mat.roughness = 0.25
-	mesh.material = mat
+	mat.roughness = 0.9
+	mesh.surface_set_material(0, mat)
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.use_colors = true
 	mm.mesh = mesh
-	var n := 3500
-	mm.instance_count = n
-	for i in n:
-		var x := rng.randf_range(-PILE_HALF.x, PILE_HALF.x)
-		var z := PILE_CENTER.z + rng.randf_range(-PILE_HALF.y, PILE_HALF.y)
-		var h := _pile_height(x, z)
-		var y := h - rng.randf() * minf(h, 0.5)
-		var basis := Basis.from_euler(Vector3(rng.randf_range(-0.6, 0.6), rng.randf() * TAU, rng.randf_range(-0.6, 0.6)))
-		mm.set_instance_transform(i, Transform3D(basis, Vector3(x, y, z)))
-		mm.set_instance_color(i, PACK_COLORS[rng.randi() % PACK_COLORS.size()])
+	mm.instance_count = count
 	var mmi := MultiMeshInstance3D.new()
 	mmi.multimesh = mm
 	add_child(mmi)
-
-	# Unsichtbarer Körper, damit der Blick den Berg trifft (Layer 2)
-	var body := StaticBody3D.new()
-	body.collision_layer = 2
-	body.collision_mask = 0
-	body.position = PILE_CENTER + Vector3(0, 0.45, 0)
-	body.set_meta("kind", "pile")
-	var col := CollisionShape3D.new()
-	var sh := BoxShape3D.new()
-	sh.size = Vector3(PILE_HALF.x * 2.0, 0.9, PILE_HALF.y * 2.0)
-	col.shape = sh
-	body.add_child(col)
-	add_child(body)
-	# Kern des Bergs, damit fallende Packs liegen bleiben (Layer 8)
-	var core := StaticBody3D.new()
-	core.collision_layer = 8
-	core.collision_mask = 0
-	core.position = PILE_CENTER + Vector3(0, 0.7, 0)
-	var ccol := CollisionShape3D.new()
-	var csh := CylinderShape3D.new()
-	csh.radius = 4.0
-	csh.height = 1.4
-	ccol.shape = csh
-	core.add_child(ccol)
-	add_child(core)
-
-	var pile_sign := Label3D.new()
-	pile_sign.text = "PACK-BERG"
-	pile_sign.font_size = 160
-	pile_sign.outline_size = 24
-	pile_sign.modulate = Color(1.0, 0.85, 0.3)
-	pile_sign.position = Vector3(0, 8.4, -14.9)
-	add_child(pile_sign)
+	return mm
 
 
-func _build_railing() -> void:
-	var metal := _mat(Color(0.95, 0.75, 0.15), 0.4, 0.5)
-	var x0 := -PILE_HALF.x - 0.3
-	var x1 := PILE_HALF.x + 0.3
-	var zf := PILE_CENTER.z + PILE_HALF.y + 0.3
-	var zb := PILE_CENTER.z - PILE_HALF.y - 0.3
-	var w := x1 - x0
-	var d := zf - zb
-	# Handlauf
-	_box(Vector3(w, 0.08, 0.08), Vector3(0, 1.05, zf), metal, false)
-	_box(Vector3(0.08, 0.08, d), Vector3(x0, 1.05, (zf + zb) / 2.0), metal, false)
-	_box(Vector3(0.08, 0.08, d), Vector3(x1, 1.05, (zf + zb) / 2.0), metal, false)
-	for i in 9:
-		var x := lerpf(x0, x1, i / 8.0)
-		_box(Vector3(0.08, 1.05, 0.08), Vector3(x, 0.52, zf), metal, false)
-	for i in 6:
-		var z := lerpf(zb, zf, i / 5.0)
-		_box(Vector3(0.08, 1.05, 0.08), Vector3(x0, 0.52, z), metal, false)
-		_box(Vector3(0.08, 1.05, 0.08), Vector3(x1, 0.52, z), metal, false)
-	# Unsichtbare Sperre, damit man nicht in den Berg läuft
-	_invisible_wall(Vector3(w, 3, 0.2), Vector3(0, 1.5, zf))
-	_invisible_wall(Vector3(0.2, 3, d), Vector3(x0, 1.5, (zf + zb) / 2.0))
-	_invisible_wall(Vector3(0.2, 3, d), Vector3(x1, 1.5, (zf + zb) / 2.0))
+func _build_forest() -> void:
+	var trunk := CylinderMesh.new()
+	trunk.top_radius = 0.16
+	trunk.bottom_radius = 0.28
+	trunk.height = 3.0
+	trunk.radial_segments = 8
+	var cone_low := CylinderMesh.new()
+	cone_low.top_radius = 0.0
+	cone_low.bottom_radius = 1.8
+	cone_low.height = 3.6
+	cone_low.radial_segments = 10
+	var cone_high := CylinderMesh.new()
+	cone_high.top_radius = 0.0
+	cone_high.bottom_radius = 1.25
+	cone_high.height = 2.8
+	cone_high.radial_segments = 10
+	var leaf := SphereMesh.new()
+	leaf.radius = 1.7
+	leaf.height = 3.0
+	leaf.radial_segments = 12
+	leaf.rings = 6
+
+	# Bäume rund um die Lichtung, dichter je weiter draußen
+	var spots: Array = []
+	var tries := 0
+	while spots.size() < 520 and tries < 5000:
+		tries += 1
+		var a := rng.randf() * TAU
+		var r := 19.0 + pow(rng.randf(), 0.7) * 60.0
+		var p := Vector3(cos(a) * r, 0, sin(a) * r) + Vector3(PILE_CENTER.x, 0, PILE_CENTER.z)
+		if p.distance_to(STORE_POS) < 9.0:
+			continue
+		spots.append(p)
+
+	var trunks := _tree_multimesh(trunk, spots.size())
+	var lows := _tree_multimesh(cone_low, spots.size())
+	var highs := _tree_multimesh(cone_high, spots.size())
+	var leaves := _tree_multimesh(leaf, spots.size())
+	var hidden := Transform3D(Basis().scaled(Vector3.ZERO), Vector3(0, -50, 0))
+	for i in spots.size():
+		var p: Vector3 = spots[i]
+		var s := rng.randf_range(0.8, 1.5)
+		var yaw := Basis(Vector3.UP, rng.randf() * TAU)
+		var sb := yaw.scaled(Vector3(s, s, s))
+		trunks.set_instance_transform(i, Transform3D(sb, p + Vector3(0, 1.5 * s, 0)))
+		trunks.set_instance_color(i, Color(0.36, 0.24, 0.15).lerp(Color(0.45, 0.32, 0.2), rng.randf()))
+		if rng.randf() < 0.7:
+			# Tanne
+			var g := Color(0.12, 0.3, 0.14).lerp(Color(0.2, 0.42, 0.18), rng.randf())
+			lows.set_instance_transform(i, Transform3D(sb, p + Vector3(0, 3.6 * s, 0)))
+			lows.set_instance_color(i, g)
+			highs.set_instance_transform(i, Transform3D(sb, p + Vector3(0, 5.4 * s, 0)))
+			highs.set_instance_color(i, g.lightened(0.08))
+			leaves.set_instance_transform(i, hidden)
+		else:
+			# Laubbaum
+			lows.set_instance_transform(i, hidden)
+			highs.set_instance_transform(i, hidden)
+			leaves.set_instance_transform(i, Transform3D(sb, p + Vector3(0, 3.9 * s, 0)))
+			leaves.set_instance_color(i, Color(0.25, 0.48, 0.15).lerp(Color(0.45, 0.6, 0.2), rng.randf()))
+		if p.distance_to(PILE_CENTER) < 40.0:
+			var body := StaticBody3D.new()
+			body.position = p + Vector3(0, 1.5, 0)
+			var col := CollisionShape3D.new()
+			var sh := CylinderShape3D.new()
+			sh.radius = 0.3 * s
+			sh.height = 3.0
+			col.shape = sh
+			body.add_child(col)
+			add_child(body)
+
+	# Felsen
+	var rock := SphereMesh.new()
+	rock.radius = 0.6
+	rock.height = 0.8
+	rock.radial_segments = 7
+	rock.rings = 4
+	var rocks := _tree_multimesh(rock, 40)
+	for i in 40:
+		var a := rng.randf() * TAU
+		var r := rng.randf_range(12.0, 30.0)
+		var p := PILE_CENTER + Vector3(cos(a) * r, 0.1, sin(a) * r)
+		if p.distance_to(STORE_POS) < 7.0:
+			p += Vector3(0, -5, 0)
+		var s := rng.randf_range(0.6, 1.8)
+		rocks.set_instance_transform(i, Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(s, s * 0.7, s)), p))
+		rocks.set_instance_color(i, Color(0.45, 0.45, 0.43).lerp(Color(0.6, 0.58, 0.55), rng.randf()))
+
+	# Unsichtbare Grenze, damit man nicht ewig in den Wald läuft
+	for k in 24:
+		var a := TAU * k / 24.0
+		var wall := StaticBody3D.new()
+		wall.position = PILE_CENTER + Vector3(cos(a) * 42.0, 2.0, sin(a) * 42.0)
+		wall.rotation.y = -a
+		var col := CollisionShape3D.new()
+		var sh := BoxShape3D.new()
+		sh.size = Vector3(1, 4, 12)
+		col.shape = sh
+		wall.add_child(col)
+		add_child(wall)
 
 
-func _build_chute() -> void:
-	var metal := _mat(Color(0.3, 0.33, 0.38), 0.4, 0.7)
-	var chute := MeshInstance3D.new()
-	var bm := BoxMesh.new()
-	bm.size = Vector3(2.0, 0.15, 5.0)
-	chute.mesh = bm
-	chute.material_override = metal
-	chute.position = Vector3(0, 6.0, -13.0)
-	chute.rotation_degrees = Vector3(-30, 0, 0)
-	add_child(chute)
+func _build_store() -> void:
+	# Holzhütte, Vorderseite zeigt zum Pack-Berg (Richtung -x)
+	var s := STORE_POS
+	var wood := _mat(Color(0.55, 0.36, 0.2), 0.85)
+	var dark_wood := _mat(Color(0.36, 0.22, 0.12), 0.85)
+	var roof_mat := _mat(Color(0.62, 0.18, 0.15), 0.7)
+	var w := 7.0
+	var d := 4.5
+	var h := 3.2
+	_box(Vector3(d + 1.0, 0.2, w + 1.0), s + Vector3(0, 0.1, 0), dark_wood)
+	_box(Vector3(0.2, h, w), s + Vector3(d / 2.0, h / 2.0, 0), wood)
+	_box(Vector3(d, h, 0.2), s + Vector3(0, h / 2.0, w / 2.0), wood)
+	_box(Vector3(d, h, 0.2), s + Vector3(0, h / 2.0, -w / 2.0), wood)
+	_box(Vector3(0.25, 0.7, w), s + Vector3(-d / 2.0, h - 0.35, 0), dark_wood)
+	for z in [-w / 2.0, w / 2.0]:
+		_box(Vector3(0.25, h, 0.25), s + Vector3(-d / 2.0, h / 2.0, z), dark_wood)
+	var roof := _box(Vector3(d + 1.8, 0.18, w + 1.0), s + Vector3(-0.2, h + 0.35, 0), roof_mat, false)
+	roof.rotation_degrees = Vector3(0, 0, 9)
 
-
-func _spawn_falling_pack() -> void:
-	var body := RigidBody3D.new()
-	body.collision_layer = 0
-	body.collision_mask = 8 | 1
-	var mi := MeshInstance3D.new()
-	var bm := BoxMesh.new()
-	bm.size = Vector3(0.26, 0.04, 0.36)
-	mi.mesh = bm
-	mi.material_override = _mat(PACK_COLORS[rng.randi() % PACK_COLORS.size()], 0.25, 0.55)
-	body.add_child(mi)
-	var col := CollisionShape3D.new()
-	var sh := BoxShape3D.new()
-	sh.size = bm.size
-	col.shape = sh
-	body.add_child(col)
-	body.position = Vector3(rng.randf_range(-0.7, 0.7), 4.8, -10.8)
-	body.linear_velocity = Vector3(rng.randf_range(-0.5, 0.5), -1.0, rng.randf_range(2.0, 3.5))
-	body.angular_velocity = Vector3(rng.randf_range(-6, 6), rng.randf_range(-6, 6), rng.randf_range(-6, 6))
-	add_child(body)
-	falling_packs += 1
-	var tw := create_tween()
-	tw.tween_interval(3.5)
-	tw.tween_property(mi, "scale", Vector3(0.01, 0.01, 0.01), 0.4)
-	tw.tween_callback(func():
-		falling_packs -= 1
-		body.queue_free())
-
-
-func _build_shop() -> void:
-	var wood := _mat(Color(0.55, 0.33, 0.18), 0.7)
-	var counter := _box(Vector3(5, 1.1, 1.0), SHOP_POS + Vector3(0, 0.55, 0), wood, true, 1 | 4)
+	# Tresen = Laden-Interaktion
+	var counter := _box(Vector3(0.9, 1.1, w - 1.0), SHOP_POS + Vector3(0, 0.55, 0), wood, true, 1 | 4)
 	counter.set_meta("kind", "shop")
-	_box(Vector3(5.2, 0.08, 1.2), SHOP_POS + Vector3(0, 1.14, 0), _mat(Color(0.85, 0.82, 0.75), 0.4), false)
-	_box(Vector3(6, 3.5, 0.3), SHOP_POS + Vector3(0, 1.75, 3.2), _mat(Color(0.25, 0.45, 0.6)), false)
-	var shop_sign := Label3D.new()
-	shop_sign.text = "LADEN"
-	shop_sign.font_size = 140
-	shop_sign.outline_size = 20
-	shop_sign.modulate = Color(0.5, 0.95, 1.0)
-	shop_sign.position = SHOP_POS + Vector3(0, 3.0, 2.9)
-	shop_sign.rotation_degrees = Vector3(0, 180, 0)
-	add_child(shop_sign)
+	_box(Vector3(1.1, 0.08, w - 0.8), SHOP_POS + Vector3(0, 1.14, 0), _mat(Color(0.85, 0.8, 0.7), 0.5), false)
+
+	# Regal mit ausgestellten Packs an der Rückwand
+	_box(Vector3(0.4, 0.06, w - 1.2), s + Vector3(d / 2.0 - 0.3, 1.4, 0), dark_wood, false)
+	_box(Vector3(0.4, 0.06, w - 1.2), s + Vector3(d / 2.0 - 0.3, 2.1, 0), dark_wood, false)
+	var pmesh := PackMeshScript.build()
+	for row in 2:
+		for k in 9:
+			var pk := MeshInstance3D.new()
+			pk.mesh = pmesh
+			pk.material_override = PackMeshScript.material(PackPileScript.COLORS[(k + row * 3) % PackPileScript.COLORS.size()])
+			pk.scale = Vector3(1.6, 1.6, 1.6)
+			pk.position = s + Vector3(d / 2.0 - 0.3, 1.4 + 0.7 * row + 0.17, -2.6 + k * 0.65)
+			pk.rotation_degrees = Vector3(-90, 0, 0)
+			pk.rotate_y(-PI / 2.0)
+			add_child(pk)
+
+	var lamp := OmniLight3D.new()
+	lamp.position = s + Vector3(0, h - 0.6, 0)
+	lamp.light_color = Color(1.0, 0.8, 0.55)
+	lamp.light_energy = 1.4
+	lamp.omni_range = 7.0
+	add_child(lamp)
+
+	var store_sign := Label3D.new()
+	store_sign.text = "PACK STORE"
+	store_sign.font_size = 120
+	store_sign.outline_size = 22
+	store_sign.modulate = Color(1.0, 0.85, 0.3)
+	store_sign.position = s + Vector3(-d / 2.0 - 0.15, h + 1.1, 0)
+	store_sign.rotation_degrees = Vector3(0, -90, 0)
+	add_child(store_sign)
 	var sub := Label3D.new()
 	sub.text = "Monster abgeben · Gadgets kaufen"
-	sub.font_size = 48
+	sub.font_size = 40
 	sub.outline_size = 10
-	sub.position = SHOP_POS + Vector3(0, 2.2, 2.9)
-	sub.rotation_degrees = Vector3(0, 180, 0)
+	sub.position = s + Vector3(-d / 2.0 - 0.15, h - 0.35, 0)
+	sub.rotation_degrees = Vector3(0, -90, 0)
 	add_child(sub)
 
 
 func _build_player() -> void:
 	player = CharacterBody3D.new()
 	player.set_script(PlayerScript)
-	player.position = Vector3(0, 0.1, 2.0)
+	player.position = Vector3(3, 0.1, 10)
+	player.rotation.y = 0.22
 	add_child(player)
 	hand_pack = MeshInstance3D.new()
-	var bm := BoxMesh.new()
-	bm.size = Vector3(0.18, 0.26, 0.025)
-	hand_pack.mesh = bm
-	hand_pack.material_override = _mat(Color(0.9, 0.25, 0.3), 0.2, 0.6)
+	hand_pack.mesh = PackMeshScript.build()
+	hand_pack.scale = Vector3(1.3, 1.3, 1.3)
+	hand_pack.material_override = PackMeshScript.material(PackPileScript.COLORS[0])
 	player.hand.add_child(hand_pack)
 
 
@@ -557,7 +652,7 @@ func _burst_at_hand(cards: Array) -> void:
 	p.global_position = player.hand.global_position
 	p.emitting = true
 	get_tree().create_timer(1.5).timeout.connect(p.queue_free)
-	hand_pack.material_override = _mat(PACK_COLORS[rng.randi() % PACK_COLORS.size()], 0.2, 0.6)
+	hand_pack.material_override = PackMeshScript.material(PackPileScript.COLORS[rng.randi() % PackPileScript.COLORS.size()])
 	if best >= 3:
 		player.shake = 0.6 + 0.4 * (best - 3)
 		_flash(color, best)
@@ -920,7 +1015,7 @@ func _refresh_hud() -> void:
 	if lbl_coins == null:
 		return
 	lbl_coins.text = "%s Münzen" % fmt(coins)
-	lbl_stats.text = "Packs geöffnet: %s\nAlbum: %d / %d" % [fmt(packs_opened), album.size(), MonsterGen.album_size()]
+	lbl_stats.text = "Packs übrig: %s\nGeöffnet: %s\nAlbum: %d / %d" % [fmt(pile.remaining), fmt(packs_opened), album.size(), MonsterGen.album_size()]
 	lbl_bag.text = "Rucksack  %d / %d" % [bag.size(), bag_capacity()]
 	bar_bag.max_value = bag_capacity()
 	bar_bag.value = bag.size()
@@ -952,6 +1047,7 @@ func save_game() -> void:
 	cfg.set_value("game", "packs_opened", packs_opened)
 	cfg.set_value("game", "album", album)
 	cfg.set_value("game", "levels", levels)
+	cfg.set_value("game", "pile", pile.counts)
 	cfg.save(SAVE_PATH)
 
 
@@ -963,6 +1059,7 @@ func load_game() -> void:
 	bag = cfg.get_value("game", "bag", [])
 	packs_opened = cfg.get_value("game", "packs_opened", 0)
 	album = cfg.get_value("game", "album", {})
+	saved_pile = cfg.get_value("game", "pile", PackedInt32Array())
 	var saved: Dictionary = cfg.get_value("game", "levels", {})
 	for k in saved:
 		if levels.has(k):
