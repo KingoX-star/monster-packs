@@ -13,7 +13,7 @@ const PILE_CENTER = Vector3(0, 0, -4)
 const STORE_POS = Vector3(14.5, 0, -4)
 const SHOP_POS = Vector3(11.6, 0, -4)
 const REACH = 7.0
-const ALBUM_BONUS_PER_ENTRY = 0.03
+const ALBUM_BONUS_PER_ENTRY = 0.01
 
 const GADGETS = [
 	{"id": "finger", "name": "Schnelle Finger", "desc": "1 Klick weniger pro Pack", "base": 25, "mult": 1.9, "max": 5},
@@ -799,12 +799,12 @@ func _build_hud() -> void:
 	reveal_box = HBoxContainer.new()
 	reveal_box.add_theme_constant_override("separation", 16)
 	reveal_box.alignment = BoxContainer.ALIGNMENT_CENTER
-	_place(reveal_box, Control.PRESET_CENTER, -510, -335, 1020, 270)
+	_place(reveal_box, Control.PRESET_CENTER, -540, -350, 1080, 312)
 	reveal_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(reveal_box)
 	lbl_more = _label("", 20)
 	lbl_more.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_place(lbl_more, Control.PRESET_CENTER, -300, -58, 600, 30)
+	_place(lbl_more, Control.PRESET_CENTER, -300, -32, 600, 30)
 	root.add_child(lbl_more)
 
 	flash = ColorRect.new()
@@ -906,50 +906,57 @@ func _build_album_ui(root: Control) -> void:
 	album_panel.add_child(v)
 	album_title = _label("", 30, Color(1.0, 0.85, 0.3))
 	v.add_child(album_title)
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(980, 620)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	v.add_child(scroll)
 	album_grid = GridContainer.new()
-	album_grid.columns = MonsterGen.BODIES.size()
-	album_grid.add_theme_constant_override("h_separation", 12)
-	album_grid.add_theme_constant_override("v_separation", 12)
-	v.add_child(album_grid)
-	v.add_child(_label("Spalten: Körperform · Zeilen: Element · jedes Monster im Album gibt +3 % Verkaufswert", 15, Color(1, 1, 1, 0.7)))
+	album_grid.columns = 10
+	album_grid.add_theme_constant_override("h_separation", 8)
+	album_grid.add_theme_constant_override("v_separation", 8)
+	scroll.add_child(album_grid)
+	v.add_child(_label("Mausrad zum Blättern · zwei Reihen pro Element · jede Karte im Album gibt +1 % Verkaufswert · Tab schließt", 15, Color(1, 1, 1, 0.7)))
 
 
 func _toggle_album() -> void:
 	album_open = not album_open
 	album_panel.visible = album_open
 	player.input_enabled = not album_open
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if album_open else Input.MOUSE_MODE_CAPTURED
 	if not album_open:
 		return
 	for c in album_grid.get_children():
 		c.queue_free()
 	album_title.text = "Album  %d / %d" % [album.size(), MonsterGen.album_size()]
-	var sc := 0.56
-	for e in MonsterGen.ELEMENTS.size():
-		for b in MonsterGen.BODIES.size():
-			var slot := Control.new()
-			slot.custom_minimum_size = MonsterCard.CARD_SIZE * sc
-			var key := "%d_%d" % [b, e]
-			if album.has(key):
-				var card = Control.new()
-				card.set_script(MonsterCard)
-				slot.add_child(card)
-				card.setup(album[key], false)
-				card.pivot_offset = Vector2.ZERO
-				card.scale = Vector2(sc, sc)
-			else:
-				var empty := Panel.new()
-				var sb := StyleBoxFlat.new()
-				sb.bg_color = Color(1, 1, 1, 0.06)
-				sb.set_corner_radius_all(12)
-				empty.add_theme_stylebox_override("panel", sb)
-				empty.set_anchors_preset(Control.PRESET_FULL_RECT)
-				slot.add_child(empty)
-				var q := _label("?", 48, Color(1, 1, 1, 0.3))
-				q.set_anchors_preset(Control.PRESET_FULL_RECT)
-				q.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-				q.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-				slot.add_child(q)
-			album_grid.add_child(slot)
+	var sc := 0.44
+	for entry in MonsterGen.all_cards():
+		var key: String = entry["code"]
+		var slot := Control.new()
+		slot.custom_minimum_size = MonsterCard.CARD_SIZE * sc
+		slot.mouse_filter = Control.MOUSE_FILTER_PASS
+		if album.has(key):
+			var card = Control.new()
+			card.set_script(MonsterCard)
+			slot.add_child(card)
+			card.setup(album[key], false)
+			card.animate = false
+			card.pivot_offset = Vector2.ZERO
+			card.scale = Vector2(sc, sc)
+		else:
+			var empty := Panel.new()
+			var sb := StyleBoxFlat.new()
+			sb.bg_color = Color(1, 1, 1, 0.06)
+			sb.set_corner_radius_all(8)
+			empty.add_theme_stylebox_override("panel", sb)
+			empty.set_anchors_preset(Control.PRESET_FULL_RECT)
+			empty.mouse_filter = Control.MOUSE_FILTER_PASS
+			slot.add_child(empty)
+			var q := _label("?\n" + key, 16, Color(1, 1, 1, 0.3))
+			q.set_anchors_preset(Control.PRESET_FULL_RECT)
+			q.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			q.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			slot.add_child(q)
+		album_grid.add_child(slot)
 
 
 func _show_reveal(cards: Array, news: Dictionary) -> void:
@@ -1058,7 +1065,12 @@ func load_game() -> void:
 	coins = cfg.get_value("game", "coins", 0)
 	bag = cfg.get_value("game", "bag", [])
 	packs_opened = cfg.get_value("game", "packs_opened", 0)
-	album = cfg.get_value("game", "album", {})
+	album = {}
+	var saved_album: Dictionary = cfg.get_value("game", "album", {})
+	for k in saved_album:
+		# Nur Karten aus dem aktuellen Kartenset übernehmen (alte Spielstände hatten andere Monster)
+		if str(k).begins_with("URF-"):
+			album[k] = saved_album[k]
 	saved_pile = cfg.get_value("game", "pile", PackedInt32Array())
 	var saved: Dictionary = cfg.get_value("game", "levels", {})
 	for k in saved:

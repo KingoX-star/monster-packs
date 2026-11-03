@@ -25,11 +25,12 @@ Ein 3D-Incremental-Spiel aus der Ego-Perspektive: Du reißt Booster-Packs auf, z
 - Pack Store als Holzhütte mit Tresen und Regal
 - 100.000 Packs liegen von Anfang an als begehbarer Berg bereit und werden beim Öffnen weniger (es kommen keine neuen dazu)
 - Packs als Folienbeutel mit gewölbter Mitte und gezackten Rändern
+- Kartenset mit 200 Karten aus `docs/karten.csv` (10 Elemente, 5 Stufen, Effekte, ANG/VER); jede Karte hat ein festes, aus Bauteilen gezeichnetes Aussehen
 - Monster-Baukasten: 4 Körperformen (Bestie, Schlange, Koloss, Phantom), 4 Elemente, leuchtende Augen, Kiefer, Hörner, Flügel, Schwanz, Stacheln, Krallen, Namen aus Silben
 - Karten im dunklen Sammelkarten-Stil mit Element-Symbol, LP und Angriff
 - Effekte je Seltenheit: Gewöhnlich ohne, ab Ungewöhnlich Leuchten und Glitzern, ab Episch Holo-Schimmer, Legendär zusätzlich Lichtstrahlen
 - 5 Seltenheiten plus 1 % Glanz-Chance (zehnfacher Wert)
-- Album mit 16 Plätzen: neue Monster kommen automatisch ins Album, jedes gibt +3 % Verkaufswert
+- Album mit 200 Plätzen zum Scrollen: neue Karten kommen automatisch ins Album, jede gibt +1 % Verkaufswert
 - 5 Gadgets: Schnelle Finger, Reißmesser, Größerer Rucksack, Pack-Schaufel, Glückslupe
 - Flow-Balken: wer ohne Pause öffnet, reißt bis zu 50 % schneller
 - Spielstand wird automatisch gespeichert (`user://save.cfg`)

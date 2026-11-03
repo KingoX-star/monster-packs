@@ -4,7 +4,7 @@ extends Control
 ## zunehmend, Legendär strahlt mit Lichtstrahlen und Holo-Schimmer.
 
 const MonsterGen = preload("res://scripts/monster_gen.gd")
-const CARD_SIZE = Vector2(190, 270)
+const CARD_SIZE = Vector2(200, 312)
 
 const GLOW_ALPHA = [0.0, 0.28, 0.42, 0.6, 0.85]
 const GLOW_SIZE = [0, 6, 10, 16, 26]
@@ -14,6 +14,7 @@ const INK = Color(0.04, 0.03, 0.05)
 
 var data: Dictionary = {}
 var is_new := false
+var animate := true
 var t := 0.0
 var bold: FontVariation
 
@@ -34,7 +35,7 @@ func setup(d: Dictionary, new_in_album: bool) -> void:
 
 func _process(delta: float) -> void:
 	t += delta
-	if data.get("shiny", false) or data.get("rarity", 0) >= 1:
+	if animate and (data.get("shiny", false) or data.get("rarity", 0) >= 1):
 		queue_redraw()
 
 
@@ -92,20 +93,27 @@ func _taper(points: Array, w0: float, w1: float, col: Color) -> void:
 # ------------------------------------------------------------------ Element-Symbole
 
 func _element_icon(c: Vector2, r: float, element: int, col: Color) -> void:
+	var dark := Color(0.06, 0.06, 0.08)
 	draw_circle(c, r + 2.0, Color(col, 0.9))
-	draw_circle(c, r, Color(0.06, 0.06, 0.08))
+	draw_circle(c, r, dark)
 	var s := r * 0.72
 	match element:
 		0:  # Feuer
 			_poly(c, s, [[0, -1], [0.35, -0.4], [0.6, 0.1], [0.5, 0.6], [0, 0.88], [-0.5, 0.6], [-0.6, 0.1], [-0.25, -0.15], [-0.12, -0.55]], col)
-			_poly(c, s, [[0, 0.1], [0.22, 0.45], [0, 0.72], [-0.22, 0.45]], Color(0.06, 0.06, 0.08))
+			_poly(c, s, [[0, 0.1], [0.22, 0.45], [0, 0.72], [-0.22, 0.45]], dark)
 		1:  # Wasser
 			var pts := PackedVector2Array([c + Vector2(0, -0.95) * s])
 			for i in 15:
 				var a := deg_to_rad(-35.0 + 250.0 * i / 14.0)
 				pts.append(c + (Vector2(0, 0.28) + Vector2(cos(a), sin(a)) * 0.58) * s)
 			draw_colored_polygon(pts, col)
-		2:  # Pflanze
+		2:  # Erde: Berg
+			_poly(c, s, [[-0.95, 0.7], [-0.3, -0.45], [0.0, 0.0], [0.35, -0.8], [0.95, 0.7]], col)
+			_poly(c, s, [[0.35, -0.8], [0.52, -0.42], [0.35, -0.5], [0.2, -0.38]], dark)
+		3:  # Luft: Wirbel
+			for k in 3:
+				draw_arc(c + Vector2(0.1 * k, -0.45 + 0.45 * k) * s, (0.55 - 0.1 * k) * s, PI * 0.9, PI * 2.1, 10, col, 2.0)
+		4:  # Pflanze: Blatt
 			var leaf := PackedVector2Array()
 			for i in 13:
 				var k := i / 12.0
@@ -114,9 +122,34 @@ func _element_icon(c: Vector2, r: float, element: int, col: Color) -> void:
 				var k := i / 12.0
 				leaf.append(c + Vector2(-sin(k * PI) * 0.55, lerpf(-0.9, 0.8, k)) * s)
 			draw_colored_polygon(leaf, col)
-			draw_line(c + Vector2(0, -0.7) * s, c + Vector2(0, 0.95) * s, Color(0.06, 0.06, 0.08), 1.5)
-		_:  # Blitz
+			draw_line(c + Vector2(0, -0.7) * s, c + Vector2(0, 0.95) * s, dark, 1.5)
+		5:  # Blitz
 			_poly(c, s, [[0.2, -0.95], [-0.42, 0.12], [0.0, 0.12], [-0.22, 0.95], [0.46, -0.2], [0.05, -0.2], [0.32, -0.95]], col)
+		6:  # Eis: Schneeflocke
+			for k in 3:
+				var a := PI / 3.0 * k + PI / 2.0
+				var d := Vector2(cos(a), sin(a)) * 0.9 * s
+				draw_line(c - d, c + d, col, 2.0)
+				for sgn: float in [-1.0, 1.0]:
+					var m := c + d * 0.55 * sgn
+					draw_line(m, m + d.rotated(0.8) * 0.3 * sgn, col, 1.5)
+					draw_line(m, m + d.rotated(-0.8) * 0.3 * sgn, col, 1.5)
+		7:  # Schatten: Sichel
+			draw_circle(c, 0.75 * s, col)
+			draw_circle(c + Vector2(0.32, -0.22) * s, 0.62 * s, dark)
+		8:  # Licht: Sonne
+			draw_circle(c, 0.42 * s, col)
+			for k in 8:
+				var a := TAU * k / 8.0
+				draw_line(c + Vector2(cos(a), sin(a)) * 0.58 * s, c + Vector2(cos(a), sin(a)) * 0.95 * s, col, 2.0)
+		_:  # Metall: Zahnrad
+			var gear := PackedVector2Array()
+			for k in 16:
+				var a := TAU * k / 16.0
+				var rr := 0.9 if (k / 2) % 2 == 0 else 0.62
+				gear.append(c + Vector2(cos(a), sin(a)) * rr * s)
+			draw_colored_polygon(gear, col)
+			draw_circle(c, 0.28 * s, dark)
 
 
 # ------------------------------------------------------------------ Monster
@@ -306,19 +339,22 @@ func _draw() -> void:
 
 	# Kopfzeile: Name und Element-Symbol
 	_box(Rect2(10, 10, w - 20, 28), Color(0.13, 0.13, 0.16), 5)
-	draw_string(bold, Vector2(17, 30), data["name"], HORIZONTAL_ALIGNMENT_LEFT, w - 60, 15, Color(0.93, 0.91, 0.86))
+	var title: String = data["name"]
+	var title_size := 15 if title.length() <= 15 else (12 if title.length() <= 20 else 10)
+	draw_string(bold, Vector2(17, 29), title, HORIZONTAL_ALIGNMENT_LEFT, w - 52, title_size, Color(0.93, 0.91, 0.86))
 	_element_icon(Vector2(w - 25, 24), 10.0, data["element"], el["accent"])
 
 	# Bildfenster
-	var art := Rect2(12, 42, w - 24, 142)
+	var art := Rect2(12, 42, w - 24, 134)
 	var bg: Color = el["bg"]
 	draw_polygon(PackedVector2Array([art.position, art.position + Vector2(art.size.x, 0), art.end, art.position + Vector2(0, art.size.y)]),
 		PackedColorArray([bg.darkened(0.4), bg.darkened(0.4), bg.lightened(0.12), bg.lightened(0.12)]))
-	var mc := Vector2(w / 2.0, 118)
+	var mc := Vector2(w / 2.0, 113)
 	for k in 3:
-		draw_circle(mc, 64.0 - k * 16.0, Color(el["accent"], 0.035 + 0.02 * k))
-	_draw_monster(mc, minf(float(data["size"]), 1.15) * 1.02)
+		draw_circle(mc, 62.0 - k * 16.0, Color(el["accent"], 0.035 + 0.02 * k))
+	_draw_monster(mc, minf(float(data["size"]), 1.15) * 0.98)
 	draw_rect(art, Color(rcol, 0.85), false, 1.5)
+	draw_string(font, art.position + Vector2(5, art.size.y - 5), str(data.get("code", "")), HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(1, 1, 1, 0.45))
 	if data["shiny"]:
 		_box(Rect2(Vector2(art.end.x - 50, art.position.y + 4), Vector2(46, 17)), Color.from_hsv(fposmod(t * 0.3, 1.0), 0.55, 0.85), 3)
 		draw_string(bold, Vector2(art.end.x - 50, art.position.y + 17), "GLANZ", HORIZONTAL_ALIGNMENT_CENTER, 46, 11, INK)
@@ -326,24 +362,31 @@ func _draw() -> void:
 		_box(Rect2(art.position + Vector2(4, 4), Vector2(42, 17)), Color(0.75, 0.1, 0.12), 3)
 		draw_string(bold, art.position + Vector2(4, 17), "NEU", HORIZONTAL_ALIGNMENT_CENTER, 42, 11, Color.WHITE)
 
-	# Typzeile mit Seltenheit
-	var type_line: String = MonsterGen.BODIES[data["body"]] + " · " + rar["name"]
-	draw_string(font, Vector2(14, 200), type_line, HORIZONTAL_ALIGNMENT_LEFT, w - 70, 11, Color(0.72, 0.7, 0.66))
+	# Typzeile: Kreaturtyp, Stufe, Seltenheit
+	var type_line := "%s · Stufe %d" % [data.get("type", MonsterGen.BODIES[data["body"]]), int(data.get("stufe", rarity + 1))]
+	var type_w := w - 30 - (rarity + 1) * 10
+	var type_size := 11 if font.get_string_size(type_line, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x <= type_w else 9
+	draw_string(font, Vector2(14, 190), type_line, HORIZONTAL_ALIGNMENT_LEFT, type_w, type_size, Color(0.75, 0.72, 0.68))
 	for i in rarity + 1:
-		var dp := Vector2(w - 16 - i * 10, 196)
+		var dp := Vector2(w - 16 - i * 10, 186)
 		_poly(dp, 1.0, [[0, -4.5], [3.5, 0], [0, 4.5], [-3.5, 0]], rcol)
 
-	# Werte: LP und Angriff
-	var hp: int = data.get("hp", 50 + rarity * 25)
-	var atk: int = data.get("atk", 40 + rarity * 20)
-	var stats := Rect2(12, 208, w - 24, 48)
+	# Effekttext
+	var fx := Rect2(12, 197, w - 24, 66)
+	_box(fx, Color(0.11, 0.11, 0.13), 4)
+	draw_multiline_string(font, fx.position + Vector2(6, 13), str(data.get("effect", "")), HORIZONTAL_ALIGNMENT_LEFT, fx.size.x - 12, 9, 6, Color(0.82, 0.8, 0.75))
+
+	# Werte: ANG und VER
+	var atk: int = data.get("atk", 0)
+	var def: int = data.get("def", 0)
+	var stats := Rect2(12, 268, w - 24, 34)
 	_box(stats, Color(0.11, 0.11, 0.14), 5, 1, Color(rcol, 0.5))
 	var half := stats.size.x / 2.0
-	draw_line(Vector2(stats.position.x + half, stats.position.y + 8), Vector2(stats.position.x + half, stats.end.y - 8), Color(1, 1, 1, 0.12), 1.0)
-	draw_string(font, Vector2(stats.position.x, stats.position.y + 16), "LP", HORIZONTAL_ALIGNMENT_CENTER, half, 11, Color(0.9, 0.4, 0.38))
-	draw_string(bold, Vector2(stats.position.x, stats.position.y + 40), str(hp), HORIZONTAL_ALIGNMENT_CENTER, half, 20, Color(0.95, 0.93, 0.9))
-	draw_string(font, Vector2(stats.position.x + half, stats.position.y + 16), "ANGRIFF", HORIZONTAL_ALIGNMENT_CENTER, half, 11, Color(0.95, 0.65, 0.3))
-	draw_string(bold, Vector2(stats.position.x + half, stats.position.y + 40), str(atk), HORIZONTAL_ALIGNMENT_CENTER, half, 20, Color(0.95, 0.93, 0.9))
+	draw_line(Vector2(stats.position.x + half, stats.position.y + 6), Vector2(stats.position.x + half, stats.end.y - 6), Color(1, 1, 1, 0.12), 1.0)
+	draw_string(font, Vector2(stats.position.x + 10, stats.position.y + 22), "ANG", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.95, 0.5, 0.35))
+	draw_string(bold, Vector2(stats.position.x, stats.position.y + 24), str(atk), HORIZONTAL_ALIGNMENT_RIGHT, half - 10, 17, Color(0.95, 0.93, 0.9))
+	draw_string(font, Vector2(stats.position.x + half + 10, stats.position.y + 22), "VER", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.45, 0.7, 0.95))
+	draw_string(bold, Vector2(stats.position.x + half, stats.position.y + 24), str(def), HORIZONTAL_ALIGNMENT_RIGHT, half - 10, 17, Color(0.95, 0.93, 0.9))
 
 	# Holo-Schimmer ab Episch
 	if rarity >= 3 or data["shiny"]:
