@@ -25,7 +25,9 @@ Ein 3D-Incremental-Spiel aus der Ego-Perspektive: Du reißt Booster-Packs auf, z
 - Pack Store als Holzhütte mit Tresen und Regal
 - 100.000 Packs liegen von Anfang an als begehbarer Berg bereit und werden beim Öffnen weniger (es kommen keine neuen dazu)
 - Packs als Folienbeutel mit gewölbter Mitte und gezackten Rändern
-- Monster-Baukasten: 4 Körperformen, 4 Elemente, Augen, Maul, Hörner, Flügel, Schwanz, Stacheln, Namen aus Silben
+- Monster-Baukasten: 4 Körperformen (Bestie, Schlange, Koloss, Phantom), 4 Elemente, leuchtende Augen, Kiefer, Hörner, Flügel, Schwanz, Stacheln, Krallen, Namen aus Silben
+- Karten im dunklen Sammelkarten-Stil mit Element-Symbol, LP und Angriff
+- Effekte je Seltenheit: Gewöhnlich ohne, ab Ungewöhnlich Leuchten und Glitzern, ab Episch Holo-Schimmer, Legendär zusätzlich Lichtstrahlen
 - 5 Seltenheiten plus 1 % Glanz-Chance (zehnfacher Wert)
 - Album mit 16 Plätzen: neue Monster kommen automatisch ins Album, jedes gibt +3 % Verkaufswert
 - 5 Gadgets: Schnelle Finger, Reißmesser, Größerer Rucksack, Pack-Schaufel, Glückslupe

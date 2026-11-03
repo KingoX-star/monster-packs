@@ -11,20 +11,22 @@ const RARITIES = [
 ]
 
 const ELEMENTS = [
-	{"name": "Feuer", "main": Color(0.95, 0.42, 0.22), "accent": Color(1.0, 0.82, 0.3), "bg": Color(0.33, 0.12, 0.08)},
-	{"name": "Wasser", "main": Color(0.25, 0.6, 0.95), "accent": Color(0.7, 0.92, 1.0), "bg": Color(0.07, 0.16, 0.32)},
-	{"name": "Pflanze", "main": Color(0.4, 0.78, 0.32), "accent": Color(0.95, 0.85, 0.35), "bg": Color(0.09, 0.25, 0.1)},
-	{"name": "Blitz", "main": Color(0.98, 0.86, 0.25), "accent": Color(0.45, 0.35, 0.95), "bg": Color(0.25, 0.22, 0.06)},
+	{"name": "Feuer", "main": Color(0.62, 0.2, 0.12), "accent": Color(1.0, 0.55, 0.15), "bg": Color(0.17, 0.05, 0.04)},
+	{"name": "Wasser", "main": Color(0.15, 0.33, 0.5), "accent": Color(0.4, 0.85, 1.0), "bg": Color(0.03, 0.07, 0.14)},
+	{"name": "Pflanze", "main": Color(0.22, 0.38, 0.18), "accent": Color(0.7, 0.95, 0.3), "bg": Color(0.04, 0.1, 0.05)},
+	{"name": "Blitz", "main": Color(0.33, 0.29, 0.44), "accent": Color(1.0, 0.88, 0.3), "bg": Color(0.08, 0.07, 0.13)},
 ]
 
-const BODIES = ["Kugel", "Turm", "Klotz", "Tropfen"]
+const BODIES = ["Bestie", "Schlange", "Koloss", "Phantom"]
+const BODY_HP = [70, 60, 95, 55]
+const BODY_ATK = [65, 70, 45, 80]
 
 const CARDS_PER_PACK = 5
 const SHINY_CHANCE = 0.01
 
-const SYL_A = ["Glim", "Bro", "Zap", "Flu", "Mok", "Kra", "Pip", "Sna", "Wum", "Tor", "Fis", "Gru", "Lum", "Ska", "Nib", "Vor"]
-const SYL_B = ["ma", "ri", "zo", "bel", "ku", "ta", "lo", "ni", "fu", "ra", ""]
-const SYL_C = ["rok", "x", "ling", "bert", "mon", "zz", "ix", "o", "ur", "pf", "dor", "li"]
+const SYL_A = ["Vor", "Kraz", "Mor", "Thal", "Gor", "Nyx", "Skar", "Drak", "Vel", "Zor", "Ul", "Rath", "Kael", "Sar", "Grim", "Ash"]
+const SYL_B = ["a", "e", "i", "o", "u", "", "", "ae"]
+const SYL_C = ["gath", "rax", "mor", "thul", "vex", "zar", "nok", "dris", "kar", "oth", "ion", "rek"]
 
 
 static func roll_rarity(rng: RandomNumberGenerator, luck: float) -> int:
@@ -68,6 +70,9 @@ static func generate(rng: RandomNumberGenerator, luck: float) -> Dictionary:
 		"name": make_name(rng),
 	}
 	m["value"] = int(RARITIES[rarity]["value"]) * (10 if shiny else 1)
+	var boost := 1.1 if shiny else 1.0
+	m["hp"] = int(round((BODY_HP[m["body"]] + rarity * 25 + rng.randi_range(0, 20)) * boost / 10.0)) * 10
+	m["atk"] = int(round((BODY_ATK[m["body"]] + rarity * 20 + rng.randi_range(0, 20)) * boost / 5.0)) * 5
 	return m
 
 

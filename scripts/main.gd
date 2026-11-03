@@ -799,12 +799,12 @@ func _build_hud() -> void:
 	reveal_box = HBoxContainer.new()
 	reveal_box.add_theme_constant_override("separation", 16)
 	reveal_box.alignment = BoxContainer.ALIGNMENT_CENTER
-	_place(reveal_box, Control.PRESET_CENTER, -470, -315, 940, 240)
+	_place(reveal_box, Control.PRESET_CENTER, -510, -335, 1020, 270)
 	reveal_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(reveal_box)
 	lbl_more = _label("", 20)
 	lbl_more.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_place(lbl_more, Control.PRESET_CENTER, -300, -67, 600, 30)
+	_place(lbl_more, Control.PRESET_CENTER, -300, -58, 600, 30)
 	root.add_child(lbl_more)
 
 	flash = ColorRect.new()
@@ -923,7 +923,7 @@ func _toggle_album() -> void:
 	for c in album_grid.get_children():
 		c.queue_free()
 	album_title.text = "Album  %d / %d" % [album.size(), MonsterGen.album_size()]
-	var sc := 0.66
+	var sc := 0.56
 	for e in MonsterGen.ELEMENTS.size():
 		for b in MonsterGen.BODIES.size():
 			var slot := Control.new()
